@@ -3,6 +3,9 @@ from flask_cors import CORS
 from flask_sqlalchemy import SQLAlchemy, or_
 from dotenv import load_dotenv
 import os
+from cashfree_pg.models.create_order_request import CreateOrderRequest
+from cashfree_pg.api_client import Cashfree
+from cashfree_pg.models.customer_details import CustomerDetails
 
 load_dotenv()
 
@@ -12,6 +15,11 @@ db = SQLAlchemy(app)
 CORS(app)
 
 seats_left = int(os.getenv("SEATS"))
+
+Cashfree.XClientId = os.getenv("CASHFREE_ID")
+Cashfree.XClientSecret = os.getenv("CASHFREE_API_KEY")
+Cashfree.XEnvironment = Cashfree.XSandbox
+x_api_version = "2023-08-01"
 
 class PaymentDetails(db.Model):
     id = db.Column(db.Integer, primary_key=True, nullable=False, autoincrement=True)
@@ -61,9 +69,16 @@ def no_of_seats_left():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
     
-@app.route("/start-payment/", methods = ["POST"])
-def start_payment():
-    pass
+@app.route("/create_order/", methods = ["POST"])
+def create_order():
+    customerDetails = CustomerDetails(customer_id="123", customer_phone="9999999999")
+    createOrderRequest = CreateOrderRequest(order_amount=1, order_currency="INR", customer_details=customerDetails)
+    try:
+        api_response = Cashfree().PGCreateOrder(x_api_version, createOrderRequest, None, None)
+        print(api_response.data)
+        return jsonify({}), 200
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
 
 @app.route(os.getenv("WEBHOOK_PATH"), methods = ["POST"])
 def payment_confirm():
