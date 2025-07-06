@@ -14,13 +14,12 @@ app.config["SQLALCHEMY_DATABASE_URI"] = os.getenv("DATABASE_URI")
 db = SQLAlchemy(app)
 CORS(app)
 
-seats_left = int(os.getenv("SEATS"))
+max_seats = int(os.getenv("SEATS"))
 
 Cashfree.XClientId = os.getenv("CASHFREE_ID")
 Cashfree.XClientSecret = os.getenv("CASHFREE_API_KEY")
 Cashfree.XEnvironment = Cashfree.XSandbox
 x_api_version = "2023-08-01"
-
 
 class PaymentDetails(db.Model):
     id = db.Column(db.Integer, primary_key=True, nullable=False, autoincrement=True)
@@ -29,12 +28,9 @@ class PaymentDetails(db.Model):
     phone_number = db.Column(db.Integer, unique=True, nullable=False)
     transaction_id = db.Column(db.Integer, unique=True, nullable=True)
     roll_no = db.Column(db.String, unique=True, nullable=False)
-    paid = db.Column(db.Boolean, nullable=False, default=False)
-
 
 with app.app_context():
     db.create_all()
-
 
 def add_to_DB(name, roll_no, email, phone_number):
     student = PaymentDetails(
@@ -44,14 +40,12 @@ def add_to_DB(name, roll_no, email, phone_number):
     db.session.commit()
     return student.id
 
-
 def confirm_payment(id, transaction_id):
     student = PaymentDetails.query.get(id=id)
     student.transaction_id = transaction_id
     student.paid = True
     db.session.commit()
     return True
-
 
 def check_prev(name, roll_no, email):
     transaction = PaymentDetails.query.filter(
@@ -66,15 +60,15 @@ def check_prev(name, roll_no, email):
     else:
         return False
 
-
 @app.route("/seats-left/", methods=["GET"])
 def no_of_seats_left():
     try:
-        global seats_left
+        global max_seats
+        booked = PaymentDetails.query.filter(paid=True).count()
+        seats_left = max_seats - booked
         return jsonify({"seat_left": seats_left}), 200
     except Exception as e:
         return jsonify({"error": str(e)}), 500
-
 
 @app.route("/create_order/", methods=["POST"])
 def create_order():
@@ -113,11 +107,9 @@ def create_order():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-
 @app.route("/payment-confirmation/", methods=["POST"])
 def payment_confirm():
     pass  # calls register if finished
-
 
 if __name__ == "__main__":
     app.run(debug=True)
