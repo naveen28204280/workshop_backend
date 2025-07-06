@@ -3,6 +3,7 @@ from flask_cors import CORS
 from flask_sqlalchemy import SQLAlchemy, or_
 from dotenv import load_dotenv
 import os
+import requests
 from cashfree_pg.models.create_order_request import CreateOrderRequest
 from cashfree_pg.api_client import Cashfree
 from cashfree_pg.models.customer_details import CustomerDetails
@@ -15,6 +16,8 @@ db = SQLAlchemy(app)
 CORS(app)
 
 max_seats = int(os.getenv("SEATS"))
+spreadsheetId = os.getenv("SPREADSHEET_ID")
+spreadsheet_access_token = os.getenv("SPREADSHEET_ACCESS_TOKEN")
 
 Cashfree.XClientId = os.getenv("CASHFREE_ID")
 Cashfree.XClientSecret = os.getenv("CASHFREE_API_KEY")
@@ -25,8 +28,8 @@ class PaymentDetails(db.Model):
     id = db.Column(db.Integer, primary_key=True, nullable=False, autoincrement=True)
     name = db.Column(db.String, nullable=False)
     email = db.Column(db.String, unique=True, nullable=False)
-    phone_number = db.Column(db.Integer, unique=True, nullable=False)
-    transaction_id = db.Column(db.Integer, unique=True, nullable=True)
+    phone_number = db.Column(db.String, unique=True, nullable=False)
+    transaction_id = db.Column(db.Integer, nullable=True)
     roll_no = db.Column(db.String, unique=True, nullable=False)
 
 with app.app_context():
@@ -40,11 +43,39 @@ def add_to_DB(name, roll_no, email, phone_number):
     db.session.commit()
     return student.id
 
+def add_to_sheet(id, name, roll_no, email, phone_number, transaction_id): # added to sheet only if transaction is completed
+    try:
+        range = "Sheet1!A2:F"
+        url = f"https://sheets.googleapis.com/v4/spreadsheets/{spreadsheetId}/values/{range}:append"
+        headers = {
+            "Authorization": f"Bearer {spreadsheet_access_token}",
+            "Content-Type": "application/json",
+        }
+        params = {
+            "valueInputOption": "RAW"
+        }
+        body = {
+            "range": range,
+            "majorDimension": "ROWS",
+            "values": [[id, name, roll_no, email, phone_number, transaction_id]],
+        }
+        response = requests.post(url, headers=headers,params=params, json=body)
+        return response.text, response.status_code
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
 def confirm_payment(id, transaction_id):
     student = PaymentDetails.query.get(id=id)
     student.transaction_id = transaction_id
-    student.paid = True
     db.session.commit()
+    add_to_sheet(
+        id=student.id, 
+        name=student.name,
+        roll_no=student.roll_no,
+        email=student.email, 
+        transaction_id=transaction_id, 
+        phone_number=student.phone_number
+    ) # verify it worked
     return True
 
 def check_prev(name, roll_no, email):
@@ -64,13 +95,13 @@ def check_prev(name, roll_no, email):
 def no_of_seats_left():
     try:
         global max_seats
-        booked = PaymentDetails.query.filter(paid=True).count()
+        booked = PaymentDetails.query.filter(PaymentDetails.transaction_id is not None).count()
         seats_left = max_seats - booked
         return jsonify({"seat_left": seats_left}), 200
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-@app.route("/create_order/", methods=["POST"])
+@app.route("/create_order/", methods=["POST"]) # check add_to_sheet if it throws an error
 def create_order():
     data = request.json
     if not all(
@@ -82,9 +113,9 @@ def create_order():
         ]
     ):
         return jsonify({"error": "Missing required fields"}), 400
-    check_prev(name=data["name"], roll_no=data["roll_no"], email=data["email"])
-    if check_prev:
-        return jsonify({"error": "This details already exist"}), 409
+    prev = check_prev(name=data["name"], roll_no=data["roll_no"], email=data["email"])
+    if prev:
+        return jsonify({"error": "These details already exist"}), 409
     id = add_to_DB(
         name=data["name"], roll_no=data["roll_no"], phone_number=data["phone_number"], email = data['email']
     )
@@ -92,7 +123,7 @@ def create_order():
         customer_id=id, customer_phone=data["phone_number"]
     )
     createOrderRequest = CreateOrderRequest(
-        order_amount=1800, order_currency="INR", customer_details=customerDetails
+        order_amount=1499, order_currency="INR", customer_details=customerDetails
     )
     try:
         api_response = Cashfree().PGCreateOrder(
@@ -109,7 +140,7 @@ def create_order():
 
 @app.route("/payment-confirmation/", methods=["POST"])
 def payment_confirm():
-    pass  # calls register if finished
+    pass  # calls confirm_payment if finished
 
 if __name__ == "__main__":
     app.run(debug=True)
