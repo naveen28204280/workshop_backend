@@ -110,6 +110,10 @@ def no_of_seats_left():
 
 @app.route("/create_order/", methods=["POST"]) # check add_to_sheet if it throws an error also check to make sure seats are left
 def create_order():
+    global max_seats
+    booked = PaymentDetails.query.filter(PaymentDetails.transaction_id is not None).count()
+    if (max_seats - booked) <= 0:
+        return jsonify({'error': "No seats left"}), 409
     data = request.json
     if not all(
         [
