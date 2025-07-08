@@ -3,6 +3,7 @@ from flask_cors import CORS
 from flask_sqlalchemy import SQLAlchemy, or_
 from dotenv import load_dotenv
 import os
+import requests
 from googleapiclient.errors import HttpError
 from google.oauth2.service_account import Credentials
 from googleapiclient.discovery import build
@@ -64,6 +65,9 @@ def add_to_sheet(id, name, roll_no, email, phone_number, transaction_id): # adde
     except HttpError as e:
         return {'error': str(e)}
 
+def get_access_token():
+    pass
+
 def confirm_payment(id, transaction_id):
     student = PaymentDetails.query.get(id=id)
     student.transaction_id = transaction_id
@@ -101,7 +105,7 @@ def no_of_seats_left():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-@app.route("/create_order/", methods=["POST"]) # check add_to_sheet if it throws an error also check to make sure seats are left
+@app.route("/create_order/", methods=["POST"]) # check add_to_sheet if it throws an error
 def create_order():
     global max_seats
     booked = PaymentDetails.query.filter(PaymentDetails.transaction_id is not None).count()
@@ -123,7 +127,12 @@ def create_order():
     id = add_to_DB(
         name=data["name"], roll_no=data["roll_no"], phone_number=data["phone_number"], email = data['email']
     )
+    access_token = get_access_token()
     url = "https://api-preprod.phonepe.com/apis/pg-sandbox/checkout/v2/pay"  # change to https://api.phonepe.com/apis/pg/checkout/v2/pay in prod
+    headers = {
+        "Content-Type": "application/json",
+        "Authorization": f"Bearer {access_token}",
+    }
     body = {
         "merchantOrderId": id,
         "amount": 149900,
@@ -132,13 +141,14 @@ def create_order():
             "type": "PG_CHECKOUT",
             "message": "Payment message used for collect requests",
             "merchantUrls": {
-                "redirectUrl": "https://mercury-uat.phonepe.com/transact/uat_v2?token=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJleHBpcmVzT24iOjE3MjgyNTk1MzE0NzgsIm1lcmNoYW50SWQiOiJWUlVBVCIsIm1lcmNoYW50T3JkZXJJZCI6Ik1PLTlkMC1hNmMyYmY1ZWM4MmUifQ.Trj5fub__kJpQhzOlJttXl2UPruHE7fsbH5QWj-iy6E",
+                "redirectUrl": f"{base_url}/payment-confirmation/",
                 "callbackUrl": f"{base_url}/payment-confirmation/",
             },
         },
     }
     try:
-        pass
+        response = requests.post(url, headers=headers, json=body)
+        return jsonify(response.json()), response.status_code
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
