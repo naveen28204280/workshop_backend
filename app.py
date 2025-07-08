@@ -3,9 +3,6 @@ from flask_cors import CORS
 from flask_sqlalchemy import SQLAlchemy, or_
 from dotenv import load_dotenv
 import os
-from cashfree_pg.models.create_order_request import CreateOrderRequest
-from cashfree_pg.api_client import Cashfree
-from cashfree_pg.models.customer_details import CustomerDetails
 from googleapiclient.errors import HttpError
 from google.oauth2.service_account import Credentials
 from googleapiclient.discovery import build
@@ -21,11 +18,6 @@ max_seats = int(os.getenv("SEATS"))
 spreadsheet_id = os.getenv("SPREADSHEET_ID")
 spreadsheet_access_token = os.getenv("SPREADSHEET_ACCESS_TOKEN")
 base_url = os.getenv("BASE_URL")
-
-Cashfree.XClientId = os.getenv("CASHFREE_ID")
-Cashfree.XClientSecret = os.getenv("CASHFREE_API_KEY")
-Cashfree.XEnvironment = Cashfree.XSandbox
-x_api_version = "2023-08-01"
 
 class PaymentDetails(db.Model):
     id = db.Column(db.Integer, primary_key=True, nullable=False, autoincrement=True)
@@ -131,32 +123,32 @@ def create_order():
     id = add_to_DB(
         name=data["name"], roll_no=data["roll_no"], phone_number=data["phone_number"], email = data['email']
     )
-    customerDetails = CustomerDetails(
-        customer_id=id, customer_phone=data["phone_number"]
-    )
-    createOrderRequest = CreateOrderRequest(
-        order_amount=1499.00, order_currency="INR", customer_details=customerDetails, notify_url = f"{base_url}/payment-confirmation/"
-    )
+    url = "https://api-preprod.phonepe.com/apis/pg-sandbox/checkout/v2/pay"  # change to https://api.phonepe.com/apis/pg/checkout/v2/pay in prod
+    body = {
+        "merchantOrderId": id,
+        "amount": 149900,
+        "expireAfter": 1200,
+        "paymentFlow": {
+            "type": "PG_CHECKOUT",
+            "message": "Payment message used for collect requests",
+            "merchantUrls": {
+                "redirectUrl": "https://mercury-uat.phonepe.com/transact/uat_v2?token=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJleHBpcmVzT24iOjE3MjgyNTk1MzE0NzgsIm1lcmNoYW50SWQiOiJWUlVBVCIsIm1lcmNoYW50T3JkZXJJZCI6Ik1PLTlkMC1hNmMyYmY1ZWM4MmUifQ.Trj5fub__kJpQhzOlJttXl2UPruHE7fsbH5QWj-iy6E",
+                "callbackUrl": f"{base_url}/payment-confirmation/",
+            },
+        },
+    }
     try:
-        api_response = Cashfree().PGCreateOrder(
-            x_api_version, createOrderRequest, None, None
-        )
-        return jsonify(
-            {
-                "order_id": api_response.data["order_id"],
-                "payment_session_id": api_response.data["payment_session_id"],
-            }
-        ), 200
+        pass
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
 @app.route("/payment-confirmation/", methods=["POST"])
 def payment_confirm():
     data = request.json
-    if data['payment']['payment_status']=="SUCCESS":
+    if data["payload"]["state"] == "COMPLETED":
         confirm_payment(
-            id = data["customer_details"]["customer_id"], 
-            transaction_id=data["payment"]["bank_reference"]
+            id = data["payload"]["merchantOrderId"], 
+            transaction_id=data["payload"]["paymentDetails"]["transactionId"]
         )
         return jsonify({'success': 'Booked a seat'}), 200
     else:
