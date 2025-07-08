@@ -18,6 +18,7 @@ CORS(app)
 max_seats = int(os.getenv("SEATS"))
 spreadsheetId = os.getenv("SPREADSHEET_ID")
 spreadsheet_access_token = os.getenv("SPREADSHEET_ACCESS_TOKEN")
+base_url = os.getenv("BASE_URL")
 
 Cashfree.XClientId = os.getenv("CASHFREE_ID")
 Cashfree.XClientSecret = os.getenv("CASHFREE_API_KEY")
@@ -101,7 +102,7 @@ def no_of_seats_left():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-@app.route("/create_order/", methods=["POST"]) # check add_to_sheet if it throws an error
+@app.route("/create_order/", methods=["POST"]) # check add_to_sheet if it throws an error also check to make sure seats are left
 def create_order():
     data = request.json
     if not all(
@@ -123,7 +124,7 @@ def create_order():
         customer_id=id, customer_phone=data["phone_number"]
     )
     createOrderRequest = CreateOrderRequest(
-        order_amount=1499, order_currency="INR", customer_details=customerDetails
+        order_amount=1499.00, order_currency="INR", customer_details=customerDetails, notify_url = f"{base_url}/payment-confirmation/"
     )
     try:
         api_response = Cashfree().PGCreateOrder(
@@ -140,7 +141,15 @@ def create_order():
 
 @app.route("/payment-confirmation/", methods=["POST"])
 def payment_confirm():
-    pass  # calls confirm_payment if finished
+    data = request.json
+    if data['payment']['payment_status']=="SUCCESS":
+        confirm_payment(
+            id = data["customer_details"]["customer_id"], 
+            transaction_id=data["payment"]["bank_reference"]
+        )
+        return jsonify({'success': 'Booked a seat'}), 200
+    else:
+        return jsonify({'error': "payment unsuccessfull"}), 400
 
 if __name__ == "__main__":
     app.run(debug=True)

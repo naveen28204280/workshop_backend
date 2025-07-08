@@ -3,3 +3,4 @@ MAX_SEATS = ""
 CASHFREE_ID = ""
 CASHFREE_API_KEY = ""
 SPREADSHEET_ID = ""
+BASE_URL = "" # For the webhook
