@@ -3,10 +3,12 @@ from flask_cors import CORS
 from flask_sqlalchemy import SQLAlchemy, or_
 from dotenv import load_dotenv
 import os
-import requests
 from cashfree_pg.models.create_order_request import CreateOrderRequest
 from cashfree_pg.api_client import Cashfree
 from cashfree_pg.models.customer_details import CustomerDetails
+import google.auth
+from googleapiclient.errors import HttpError
+from googleapiclient.discovery import build
 
 load_dotenv()
 
@@ -16,7 +18,7 @@ db = SQLAlchemy(app)
 CORS(app)
 
 max_seats = int(os.getenv("SEATS"))
-spreadsheetId = os.getenv("SPREADSHEET_ID")
+spreadsheet_id = os.getenv("SPREADSHEET_ID")
 spreadsheet_access_token = os.getenv("SPREADSHEET_ACCESS_TOKEN")
 base_url = os.getenv("BASE_URL")
 
@@ -46,24 +48,28 @@ def add_to_DB(name, roll_no, email, phone_number):
 
 def add_to_sheet(id, name, roll_no, email, phone_number, transaction_id): # added to sheet only if transaction is completed
     try:
-        range = "Sheet1!A2:F"
-        url = f"https://sheets.googleapis.com/v4/spreadsheets/{spreadsheetId}/values/{range}:append"
-        headers = {
-            "Authorization": f"Bearer {spreadsheet_access_token}",
-            "Content-Type": "application/json",
-        }
-        params = {
-            "valueInputOption": "RAW"
-        }
-        body = {
-            "range": range,
-            "majorDimension": "ROWS",
-            "values": [[id, name, roll_no, email, phone_number, transaction_id]],
-        }
-        response = requests.post(url, headers=headers,params=params, json=body)
-        return response.text, response.status_code
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        global spreadsheet_id
+        range = "A2:F"
+        creds, _ = google.auth.default()
+        service = build("sheets", "v4", credentials=creds)
+        values = [[id, name, roll_no, email, phone_number, transaction_id]]
+        
+        body = {"values": values}
+        result = (
+            service.spreadsheets()
+            .values()
+            .append(
+                spreadsheetId=spreadsheet_id,
+                range=range,
+                valueInputOption="RAW",
+                body=body,
+            )
+            .execute()
+        )
+        return result
+
+    except HttpError as e:
+        return jsonify({'error': e})
 
 def confirm_payment(id, transaction_id):
     student = PaymentDetails.query.get(id=id)

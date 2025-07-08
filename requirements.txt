@@ -4,5 +4,6 @@ Flask==3.1.1
 flask-cors==6.0.1
 Flask-SQLAlchemy==3.1.1
 python-dotenv==1.1.1
-requests==2.32.4
 SQLAlchemy==2.0.41
+google-auth==2.40.3
+google-api-python-client==2.175.0
