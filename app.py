@@ -1,9 +1,10 @@
-from flask import Flask, jsonify
+from flask import Flask, request, jsonify
 from flask_cors import CORS
 from flask_sqlalchemy import SQLAlchemy, or_
 from dotenv import load_dotenv
 import os
 import random
+import shutil
 import google.auth
 from googleapiclient.errors import HttpError
 from googleapiclient.discovery import build
@@ -102,6 +103,7 @@ def no_of_seats_left():
 
 @app.route("/create-order/", methods=["POST"]) # check add_to_sheet if it throws an error also check to make sure seats are left
 def create_order():
+    os.makedirs('qr_codes', exist_ok=True)
     files = [
         f for f in os.listdir('qr_codes') if f.lower().endswith((".png", ".jpg", ".jpeg"))
     ]
@@ -111,7 +113,18 @@ def create_order():
 
 @app.route("/payment-confirmation/", methods=["POST"])
 def payment_confirm():
-    pass
+    if "image" not in request.files or "name" not in request.form:
+        return {"error": "Missing required fields"}, 400
+    image = request.files["image"]
+    name = request.form["name"]
+    if image.filename == "":
+        return {"error": "No file selected"}, 400
+    os.makedirs("payment_confirmation", exist_ok=True)
+    _, ext = os.path.splitext(image.filename)
+    new_filename = f"{name}{ext}"
+    destination_path = os.path.join("payment_confirmation", new_filename)
+    image.save(destination_path)
+    return {"stored_path": destination_path}, 200
 
 if __name__ == "__main__":
     app.run(debug=True)
