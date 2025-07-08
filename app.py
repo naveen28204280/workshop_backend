@@ -168,44 +168,44 @@ def create_order():
     id = add_to_DB(
         name=data["name"], roll_no=data["roll_no"], phone_number=data["phone_number"], email = data['email']
     )
-    add_to_sheet(
-        id=1, 
-        name=data["name"],
-        roll_no=data["roll_no"],
-        email=data["email"], 
-        transaction_id=1, 
-        phone_number=data["phone_number"]
-        )
-    sendMail(
-        to_email=data["email"],
-        subject="Workshop Seat Confirmed 🎉",
-        body=f"Hi {data["name"]},\n\nYour seat has been confirmed! ✅\n\nTransaction ID: {1}\n\nThank you!"
-    )
+    # add_to_sheet(
+    #     id=1, 
+    #     name=data["name"],
+    #     roll_no=data["roll_no"],
+    #     email=data["email"], 
+    #     transaction_id=1, 
+    #     phone_number=data["phone_number"]
+    #     )
+    # sendMail(
+    #     to_email=data["email"],
+    #     subject="Workshop Seat Confirmed 🎉",
+    #     body=f"Hi {data["name"]},\n\nYour seat has been confirmed! ✅\n\nTransaction ID: {1}\n\nThank you!"
+    # )
 
-    # access_token = get_access_token()
-    # url = "https://api-preprod.phonepe.com/apis/pg-sandbox/checkout/v2/pay"  # change to https://api.phonepe.com/apis/pg/checkout/v2/pay in prod
-    # headers = {
-    #     "Content-Type": "application/json",
-    #     "Authorization": f"Bearer {access_token}",
-    # }
-    # body = {
-    #     "merchantOrderId": id,
-    #     "amount": 149900,
-    #     "expireAfter": 1200,
-    #     "paymentFlow": {
-    #         "type": "PG_CHECKOUT",
-    #         "message": "Payment message used for collect requests",
-    #         "merchantUrls": {
-    #             "redirectUrl": f"{base_url}/payment-confirmation/",
-    #             "callbackUrl": f"{base_url}/payment-confirmation/",
-    #         },
-    #     },
-    # }
-    # try:
-    #     response = requests.post(url, headers=headers, json=body)
-    #     return jsonify(response.json()), response.status_code
-    # except Exception as e:
-    #     return jsonify({"error": str(e)}), 500
+    access_token = get_access_token()
+    url = "https://api-preprod.phonepe.com/apis/pg-sandbox/checkout/v2/pay"  # change to https://api.phonepe.com/apis/pg/checkout/v2/pay in prod
+    headers = {
+        "Content-Type": "application/json",
+        "Authorization": f"Bearer {access_token}",
+    }
+    body = {
+        "merchantOrderId": id,
+        "amount": 149900,
+        "expireAfter": 1200,
+        "paymentFlow": {
+            "type": "PG_CHECKOUT",
+            "message": "Payment message used for collect requests",
+            "merchantUrls": {
+                "redirectUrl": f"{base_url}/payment-confirmation/",
+                "callbackUrl": f"{base_url}/payment-confirmation/",
+            },
+        },
+    }
+    try:
+        response = requests.post(url, headers=headers, json=body)
+        return jsonify(response.json()), response.status_code
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 @app.route("/payment-confirmation/", methods=["POST"])
 def payment_confirm():
