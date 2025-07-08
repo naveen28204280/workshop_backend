@@ -6,8 +6,8 @@ import os
 from cashfree_pg.models.create_order_request import CreateOrderRequest
 from cashfree_pg.api_client import Cashfree
 from cashfree_pg.models.customer_details import CustomerDetails
-import google.auth
 from googleapiclient.errors import HttpError
+from google.oauth2.service_account import Credentials
 from googleapiclient.discovery import build
 
 load_dotenv()
@@ -50,7 +50,8 @@ def add_to_sheet(id, name, roll_no, email, phone_number, transaction_id): # adde
     try:
         global spreadsheet_id
         range = "A2:F"
-        creds, _ = google.auth.default()
+        scopes = ["https://www.googleapis.com/auth/spreadsheets"]
+        creds = Credentials.from_service_account_file("creds.json", scopes=scopes)
         service = build("sheets", "v4", credentials=creds)
         values = [[id, name, roll_no, email, phone_number, transaction_id]]
         
@@ -69,7 +70,7 @@ def add_to_sheet(id, name, roll_no, email, phone_number, transaction_id): # adde
         return result
 
     except HttpError as e:
-        return jsonify({'error': e})
+        return {'error': str(e)}
 
 def confirm_payment(id, transaction_id):
     student = PaymentDetails.query.get(id=id)
