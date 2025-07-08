@@ -11,3 +11,7 @@ __pycache__/
 *.DS_Store
 
 .vscode/
+
+qr_codes/*
+
+payment_confirmation/*

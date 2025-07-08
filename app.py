@@ -1,11 +1,9 @@
-from flask import Flask, request, jsonify
+from flask import Flask, jsonify
 from flask_cors import CORS
 from flask_sqlalchemy import SQLAlchemy, or_
 from dotenv import load_dotenv
 import os
-from cashfree_pg.models.create_order_request import CreateOrderRequest
-from cashfree_pg.api_client import Cashfree
-from cashfree_pg.models.customer_details import CustomerDetails
+import random
 import google.auth
 from googleapiclient.errors import HttpError
 from googleapiclient.discovery import build
@@ -20,12 +18,6 @@ CORS(app)
 max_seats = int(os.getenv("SEATS"))
 spreadsheet_id = os.getenv("SPREADSHEET_ID")
 spreadsheet_access_token = os.getenv("SPREADSHEET_ACCESS_TOKEN")
-base_url = os.getenv("BASE_URL")
-
-Cashfree.XClientId = os.getenv("CASHFREE_ID")
-Cashfree.XClientSecret = os.getenv("CASHFREE_API_KEY")
-Cashfree.XEnvironment = Cashfree.XSandbox
-x_api_version = "2023-08-01"
 
 class PaymentDetails(db.Model):
     id = db.Column(db.Integer, primary_key=True, nullable=False, autoincrement=True)
@@ -108,54 +100,18 @@ def no_of_seats_left():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-@app.route("/create_order/", methods=["POST"]) # check add_to_sheet if it throws an error also check to make sure seats are left
+@app.route("/create-order/", methods=["POST"]) # check add_to_sheet if it throws an error also check to make sure seats are left
 def create_order():
-    data = request.json
-    if not all(
-        [
-            data.get("name"),
-            data.get("roll_no"),
-            data.get("email"),
-            data.get("phone_number"),
-        ]
-    ):
-        return jsonify({"error": "Missing required fields"}), 400
-    prev = check_prev(name=data["name"], roll_no=data["roll_no"], email=data["email"])
-    if prev:
-        return jsonify({"error": "These details already exist"}), 409
-    id = add_to_DB(
-        name=data["name"], roll_no=data["roll_no"], phone_number=data["phone_number"], email = data['email']
-    )
-    customerDetails = CustomerDetails(
-        customer_id=id, customer_phone=data["phone_number"]
-    )
-    createOrderRequest = CreateOrderRequest(
-        order_amount=1499.00, order_currency="INR", customer_details=customerDetails, notify_url = f"{base_url}/payment-confirmation/"
-    )
-    try:
-        api_response = Cashfree().PGCreateOrder(
-            x_api_version, createOrderRequest, None, None
-        )
-        return jsonify(
-            {
-                "order_id": api_response.data["order_id"],
-                "payment_session_id": api_response.data["payment_session_id"],
-            }
-        ), 200
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
+    files = [
+        f for f in os.listdir('qr_codes') if f.lower().endswith((".png", ".jpg", ".jpeg"))
+    ]
+    if not files:
+        return None
+    return os.path.join('qr_codes', random.choice(files))
 
 @app.route("/payment-confirmation/", methods=["POST"])
 def payment_confirm():
-    data = request.json
-    if data['payment']['payment_status']=="SUCCESS":
-        confirm_payment(
-            id = data["customer_details"]["customer_id"], 
-            transaction_id=data["payment"]["bank_reference"]
-        )
-        return jsonify({'success': 'Booked a seat'}), 200
-    else:
-        return jsonify({'error': "payment unsuccessfull"}), 400
+    pass
 
 if __name__ == "__main__":
     app.run(debug=True)
