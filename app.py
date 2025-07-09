@@ -23,10 +23,10 @@ base_url = os.getenv("BASE_URL")
 class PaymentDetails(db.Model):
     id = db.Column(db.Integer, primary_key=True, nullable=False, autoincrement=True)
     name = db.Column(db.String, nullable=False)
-    email = db.Column(db.String, unique=True, nullable=False)
-    phone_number = db.Column(db.String, unique=True, nullable=False)
+    email = db.Column(db.String, nullable=False)
+    phone_number = db.Column(db.String, nullable=False)
     transaction_id = db.Column(db.Integer, nullable=True)
-    roll_no = db.Column(db.String, unique=True, nullable=False)
+    roll_no = db.Column(db.String, nullable=False)
 
 with app.app_context():
     db.create_all()
@@ -94,10 +94,7 @@ def check_prev(name, roll_no, email):
             PaymentDetails.email == email,
         )
     ).first()
-    if transaction:
-        return True
-    else:
-        return False
+    return transaction
 
 @app.route("/seats-left/", methods=["GET"])
 def no_of_seats_left():
@@ -126,11 +123,14 @@ def create_order():
     ):
         return jsonify({"error": "Missing required fields"}), 400
     prev = check_prev(name=data["name"], roll_no=data["roll_no"], email=data["email"])
-    if prev:
-        return jsonify({"error": "These details already exist"}), 409
-    id = add_to_DB(
-        name=data["name"], roll_no=data["roll_no"], phone_number=data["phone_number"], email = data['email']
-    )
+    if prev.transaction_id:
+        return jsonify({"error": "You have already paid"}), 409
+    if not prev:
+        id = add_to_DB(
+            name=data["name"], roll_no=data["roll_no"], phone_number=data["phone_number"], email = data['email']
+        )
+    else:
+        id = prev.id
     access_token = get_access_token()
     url = "https://api-preprod.phonepe.com/apis/pg-sandbox/checkout/v2/pay"  # change to https://api.phonepe.com/apis/pg/checkout/v2/pay in prod
     headers = {
