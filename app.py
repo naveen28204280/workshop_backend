@@ -127,7 +127,7 @@ def get_access_token():
         token_data = data
         return data['access_token']
     except Exception as e:
-        print()
+        print(str(e))
         return str(e)
     
 def confirm_payment(id, transaction_id):
@@ -192,12 +192,12 @@ def create_order():
     prev = check_prev(name=data["name"], roll_no=data["roll_no"], email=data["email"])
     if prev.transaction_id:
         return jsonify({"error": "You have already paid"}), 409
-    if not prev:
+    elif prev:
+        id = prev.id
+    else:
         id = add_to_DB(
             name=data["name"], roll_no=data["roll_no"], phone_number=data["phone_number"], email = data['email']
         )
-    else:
-        id = prev.id
     try:
         access_token = get_access_token()
         url = "https://api-preprod.phonepe.com/apis/pg-sandbox/checkout/v2/pay"  # change to https://api.phonepe.com/apis/pg/checkout/v2/pay in prod
@@ -237,6 +237,10 @@ def payment_confirm():
             return jsonify({'error': 'payment successful but failed to add to sheets'}), 
     else:
         return jsonify({'error': "payment unsuccessfull"}), 400
+    
+@app.route("/payment-finished/", methods=["POST"])
+def confirm_fallback():
+    pass
 
 if __name__ == "__main__":
     app.run(debug=True)
