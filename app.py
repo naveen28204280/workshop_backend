@@ -220,30 +220,34 @@ def create_order():
             },
         }
         response = requests.post(url, headers=headers, json=body)
-        data = response.json()
-        print(data)
-        return jsonify(data),200
+        data = response.json
+        return jsonify({'redirectUrl': data['redirectUrl'], "orderId": id}), 200
     except Exception as e:
-        return jsonify({"error": str(e)}),500
-
-
-@app.route("/payment-confirmation/", methods=["POST"]) # not return. It needs to prep for recieving frontends requests
-def payment_confirm():
-    data = request.json
-    if data["payload"]["state"] == "COMPLETED":
-        if confirm_payment(
-            id = data["payload"]["merchantOrderId"], 
-            transaction_id=data["payload"]["paymentDetails"]["transactionId"]
-        ):
-            return jsonify({'success': 'Booked a seat'}), 200
-        else:
-            return jsonify({'error': 'payment successful but failed to add to sheets'}), 
-    else:
-        return jsonify({'error': "payment unsuccessfull"}), 400
+        return jsonify({"error": str(e)}), 500
     
-@app.route("/payment-finished/", methods=["POST"])
-def confirm_fallback():
-    pass
+@app.route("/payment-confirmation/<int:merchantOrderId>", methods=["POST"])
+def payment_confirmation(merchantOrderId):
+    access_token = get_access_token()
+    url = f"https://api-preprod.phonepe.com/apis/pg-sandbox/checkout/v2/order/{merchantOrderId}/status"
+    headers = {
+        "Content-Type": "application/json",
+        "Authorizaton": f"O-Bearer {access_token}",
+    }
+    params = {
+        "details": "false",
+        "errorContext": "false"
+    }
+    completed=False
+    while completed:
+        try:
+            response = requests.get(url, headers=headers, params=params)
+            data = response.json()
+            if data['state']=="COMPLETED":
+                completed=True
+                return jsonify({"success": "Payment completed"}), 200
+
+        except Exception as e:
+            return jsonify({'error': "payment failed"}), 500
 
 if __name__ == "__main__":
     app.run(debug=True)
