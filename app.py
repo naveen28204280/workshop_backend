@@ -5,8 +5,16 @@ from dotenv import load_dotenv
 import os
 import requests
 from googleapiclient.errors import HttpError
-from google.oauth2.service_account import Credentials
+from google.oauth2.service_account import Credentials as ServiceAccountCredentials
 from googleapiclient.discovery import build
+from google.auth.transport.requests import Request
+from google.oauth2.credentials import Credentials
+from google_auth_oauthlib.flow import InstalledAppFlow
+from email.message import EmailMessage
+from googleapiclient.discovery import build
+from googleapiclient.errors import HttpError
+import base64
+import os.path
 
 load_dotenv()
 
@@ -31,6 +39,38 @@ class PaymentDetails(db.Model):
 with app.app_context():
     db.create_all()
 
+def sendMail(to_email: str, subject: str, body: str):
+    SCOPES = ['https://www.googleapis.com/auth/gmail.send']
+    creds = None
+    if os.path.exists('token.json'):
+        creds = Credentials.from_authorized_user_file('token.json', SCOPES)
+    if not creds or not creds.valid:
+        if creds and creds.expired and creds.refresh_token:
+            creds.refresh(Request())
+        else:
+            flow = InstalledAppFlow.from_client_secrets_file('credentials.json', SCOPES)
+            creds = flow.run_local_server(port=0)
+        with open('token.json', 'w') as token:
+            token.write(creds.to_json())
+
+    try:
+        service = build('gmail', 'v1', credentials=creds)
+        message = EmailMessage()
+        message.set_content(body)
+        message['To'] = to_email
+        message['From'] = 'me'
+        message['Subject'] = subject
+
+        encoded_message = base64.urlsafe_b64encode(message.as_bytes()).decode()
+        create_message = {'raw': encoded_message}
+
+        send_message = service.users().messages().send(userId="me", body=create_message).execute()
+        print(f"✅ Email sent successfully to {to_email} (ID: {send_message['id']})")
+        return send_message['id']
+    except Exception as e:
+        print(f"❌ Failed to send email: {e}")
+        return None
+
 def add_to_DB(name, roll_no, email, phone_number):
     student = PaymentDetails(
         name=name, roll_no=roll_no, email=email, phone_number=phone_number
@@ -44,7 +84,7 @@ def add_to_sheet(id, name, roll_no, email, phone_number, transaction_id): # adde
         global spreadsheet_id
         range = "A2:F"
         scopes = ["https://www.googleapis.com/auth/spreadsheets"]
-        creds = Credentials.from_service_account_file("creds.json", scopes=scopes)
+        creds = ServiceAccountCredentials.from_service_account_file("creds.json", scopes=scopes)
         service = build("sheets", "v4", credentials=creds)
         values = [[id, name, roll_no, email, phone_number, transaction_id]]
         
@@ -80,7 +120,12 @@ def confirm_payment(id, transaction_id):
             email=student.email, 
             transaction_id=transaction_id, 
             phone_number=student.phone_number
-        ) # verify it worked
+        )
+        sendMail(
+            to_email=student.email,
+            subject="Workshop Seat Confirmed 🎉",
+            body=f"Hi {student.name},\n\nYour seat has been confirmed! ✅\n\nTransaction ID: {transaction_id}\n\nThank you for joining our workshop!"
+        )
     except Exception as e:
         print(f'adding to sheet failed {e}')
         return False
@@ -157,7 +202,7 @@ def create_order():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-@app.route("/payment-confirmation/", methods=["POST"])
+@app.route("/payment-confirmation/", methods=["POST"]) # not return. It needs to prep for recieving frontends requests
 def payment_confirm():
     data = request.json
     if data["payload"]["state"] == "COMPLETED":
