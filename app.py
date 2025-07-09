@@ -1,6 +1,7 @@
 from flask import Flask, request, jsonify
 from flask_cors import CORS
-from flask_sqlalchemy import SQLAlchemy, or_
+from flask_sqlalchemy import SQLAlchemy
+from sqlalchemy import or_
 from dotenv import load_dotenv
 import os
 import requests
@@ -122,12 +123,11 @@ def get_access_token():
             'client_version': 1,
             'grant_type': 'client_credentials'
         }
-        response = requests.post(url=url, headers=headers, json=json)
-        data = response.json
+        response = requests.post(url=url, headers=headers, data=json)
+        data = response.json()
         token_data = data
         return data['access_token']
     except Exception as e:
-        print(str(e))
         return str(e)
     
 def confirm_payment(id, transaction_id):
@@ -176,9 +176,9 @@ def no_of_seats_left():
 @app.route("/create_order/", methods=["POST"])
 def create_order():
     global max_seats
-    booked = PaymentDetails.query.filter(PaymentDetails.transaction_id is not None).count()
+    booked = 0
     if (max_seats - booked) <= 0:
-        return jsonify({'error': "No seats left"}), 409
+        return jsonify({'error': "No seats left"}),409
     data = request.json
     if not all(
         [
@@ -188,12 +188,13 @@ def create_order():
             data.get("phone_number"),
         ]
     ):
-        return jsonify({"error": "Missing required fields"}), 400
+        return jsonify({"error": "Missing required fields"}),400
     prev = check_prev(name=data["name"], roll_no=data["roll_no"], email=data["email"])
-    if prev.transaction_id:
-        return jsonify({"error": "You have already paid"}), 409
-    elif prev:
+    if prev and not prev.transaction_id:
         id = prev.id
+    if prev:
+        if prev.transaction_id:
+            return jsonify({"error": "You have already paid"}),409
     else:
         id = add_to_DB(
             name=data["name"], roll_no=data["roll_no"], phone_number=data["phone_number"], email = data['email']
@@ -203,10 +204,10 @@ def create_order():
         url = "https://api-preprod.phonepe.com/apis/pg-sandbox/checkout/v2/pay"  # change to https://api.phonepe.com/apis/pg/checkout/v2/pay in prod
         headers = {
             "Content-Type": "application/json",
-            "Authorization": f"Bearer {access_token}",
+            "Authorization": f"O-Bearer {access_token}",
         }
         body = {
-            "merchantOrderId": id,
+            "merchantOrderId": str(id),
             "amount": 149900,
             "expireAfter": 1200,
             "paymentFlow": {
@@ -219,10 +220,12 @@ def create_order():
             },
         }
         response = requests.post(url, headers=headers, json=body)
-        data = response.json
-        return jsonify({'redirectUrl': data['redirectUrl']}), 200
+        data = response.json()
+        print(data)
+        return jsonify(data),200
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"error": str(e)}),500
+
 
 @app.route("/payment-confirmation/", methods=["POST"]) # not return. It needs to prep for recieving frontends requests
 def payment_confirm():
