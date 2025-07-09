@@ -15,6 +15,7 @@ from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 import base64
 import os.path
+import time
 
 load_dotenv()
 
@@ -27,6 +28,7 @@ max_seats = int(os.getenv("SEATS"))
 spreadsheet_id = os.getenv("SPREADSHEET_ID")
 spreadsheet_access_token = os.getenv("SPREADSHEET_ACCESS_TOKEN")
 base_url = os.getenv("BASE_URL")
+token_data = None
 
 class PaymentDetails(db.Model):
     id = db.Column(db.Integer, primary_key=True, nullable=False, autoincrement=True)
@@ -106,8 +108,28 @@ def add_to_sheet(id, name, roll_no, email, phone_number, transaction_id): # adde
         return {'error': str(e)}
 
 def get_access_token():
-    pass
-
+    global token_data
+    if token_data and time.time() < token_data['expires_at']:
+        return token_data['access_token']
+    try:
+        url = "https://api-preprod.phonepe.com/apis/pg-sandbox/v1/oauth/token" # change to https://api.phonepe.com/apis/identity-manager/v1/oauth/token for prod
+        headers = {
+            'Content-Type': 'application/x-www-form-urlencoded'
+        }
+        json = {
+            'client_id': os.getenv("PHONEPE_CLIENT_ID"),
+            'client_secret': os.getenv("PHONEPE_CLIENT_SECRET"),
+            'client_version': 1,
+            'grant_type': 'client_credentials'
+        }
+        response = requests.post(url=url, headers=headers, json=json)
+        data = response.json
+        token_data = data
+        return data['access_token']
+    except Exception as e:
+        print()
+        return str(e)
+    
 def confirm_payment(id, transaction_id):
     student = PaymentDetails.query.get(id=id)
     student.transaction_id = transaction_id
@@ -176,26 +198,26 @@ def create_order():
         )
     else:
         id = prev.id
-    access_token = get_access_token()
-    url = "https://api-preprod.phonepe.com/apis/pg-sandbox/checkout/v2/pay"  # change to https://api.phonepe.com/apis/pg/checkout/v2/pay in prod
-    headers = {
-        "Content-Type": "application/json",
-        "Authorization": f"Bearer {access_token}",
-    }
-    body = {
-        "merchantOrderId": id,
-        "amount": 149900,
-        "expireAfter": 1200,
-        "paymentFlow": {
-            "type": "PG_CHECKOUT",
-            "message": "Payment message used for collect requests",
-            "merchantUrls": {
-                "redirectUrl": f"{base_url}/payment-confirmation/",
-                "callbackUrl": f"{base_url}/payment-confirmation/",
-            },
-        },
-    }
     try:
+        access_token = get_access_token()
+        url = "https://api-preprod.phonepe.com/apis/pg-sandbox/checkout/v2/pay"  # change to https://api.phonepe.com/apis/pg/checkout/v2/pay in prod
+        headers = {
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {access_token}",
+        }
+        body = {
+            "merchantOrderId": id,
+            "amount": 149900,
+            "expireAfter": 1200,
+            "paymentFlow": {
+                "type": "PG_CHECKOUT",
+                "message": "Payment message used for collect requests",
+                "merchantUrls": {
+                    "redirectUrl": f"{base_url}/payment-confirmation/",
+                    "callbackUrl": f"{base_url}/payment-confirmation/",
+                },
+            },
+        }
         response = requests.post(url, headers=headers, json=body)
         data = response.json
         return jsonify({'redirectUrl': data['redirectUrl']}), 200
