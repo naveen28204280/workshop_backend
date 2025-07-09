@@ -61,7 +61,7 @@ def sendMail(to_email: str, subject: str, body: str):
         message = EmailMessage()
         message.set_content(body)
         message['To'] = to_email
-        message['From'] = 'me'
+        message['From'] = os.geten
         message['Subject'] = subject
 
         encoded_message = base64.urlsafe_b64encode(message.as_bytes()).decode()
@@ -176,7 +176,7 @@ def no_of_seats_left():
 @app.route("/create_order/", methods=["POST"])
 def create_order():
     global max_seats
-    booked = 0
+    booked = PaymentDetails.query.filter(PaymentDetails.transaction_id is not None).count()
     if (max_seats - booked) <= 0:
         return jsonify({'error': "No seats left"}),409
     data = request.json
@@ -228,7 +228,7 @@ def create_order():
 @app.route("/payment-confirmation/<int:merchantOrderId>", methods=["POST"])
 def payment_confirmation(merchantOrderId):
     access_token = get_access_token()
-    url = f"https://api-preprod.phonepe.com/apis/pg-sandbox/checkout/v2/order/{merchantOrderId}/status"
+    url = f"https://api-preprod.phonepe.com/apis/pg-sandbox/checkout/v2/order/{merchantOrderId}/status" # change to https://api.phonepe.com/apis/pg in prod
     headers = {
         "Content-Type": "application/json",
         "Authorizaton": f"O-Bearer {access_token}",
