@@ -25,7 +25,7 @@ app.config["SQLALCHEMY_DATABASE_URI"] = os.getenv("DATABASE_URI")
 db = SQLAlchemy(app)
 CORS(app)
 
-max_seats = int(os.getenv("SEATS"))
+max_seats = int(os.getenv("MAX_SEATS"))
 spreadsheet_id = os.getenv("SPREADSHEET_ID")
 spreadsheet_access_token = os.getenv("SPREADSHEET_ACCESS_TOKEN")
 base_url = os.getenv("BASE_URL")
@@ -60,7 +60,7 @@ def sendMail(to_email: str, subject: str, body: str):
         message = EmailMessage()
         message.set_content(body)
         message['To'] = to_email
-        message['From'] = os.geten
+        message['From'] = os.getenv("AMFOSS_MAIL")
         message['Subject'] = subject
         encoded_message = base64.urlsafe_b64encode(message.as_bytes()).decode()
         create_message = {'raw': encoded_message}
@@ -145,7 +145,6 @@ def confirm_payment(id, transaction_id):
             body=f"Hi {student.name},\n\nYour seat has been confirmed! ✅\n\nTransaction ID: {transaction_id}\n\nThank you for joining our workshop!"
         )
     except Exception as e:
-        print(f'adding to sheet failed {e}')
         return False
     return True
 
@@ -210,13 +209,13 @@ def create_order():
                 "type": "PG_CHECKOUT",
                 "message": "Payment message used for collect requests",
                 "merchantUrls": {
-                    "redirectUrl": f"{base_url}/payment-confirmation/",
-                    "callbackUrl": f"{base_url}/payment-confirmation/",
+                    "redirectUrl": f"{base_url}/payment-status/",
+                    "callbackUrl": f"{base_url}/payment-status/",
                 },
             },
         }
         response = requests.post(url, headers=headers, json=body)
-        data = response.json
+        data = response.json()
         return jsonify({'redirectUrl': data['redirectUrl'], "orderId": id}), 200
     except Exception as e:
         return jsonify({"error": str(e)}), 500
@@ -234,15 +233,18 @@ def payment_confirmation(merchantOrderId):
         "errorContext": "false"
     }
     completed=False
-    while completed:
+    while not completed:
         try:
             response = requests.get(url, headers=headers, params=params)
             data = response.json()
             if data['state']=="COMPLETED":
                 completed=True
-                return jsonify({"success": "Payment completed"}), 200
+                if confirm_payment(id = data["payload"]["merchantOrderId"], transaction_id=data["payload"]["paymentDetails"]["transactionId"]):
+                    return jsonify({'success': 'Booked a seat'}), 200
+                else:
+                    return jsonify({'error': 'payment successful but failed to add to sheets'}), 202
         except Exception as e:
-            return jsonify({'error': "payment failed"}), 500
+            return jsonify({'error': str(e)}), 500
 
 if __name__ == "__main__":
     app.run(debug=True)
