@@ -55,7 +55,6 @@ def sendMail(to_email: str, subject: str, body: str):
             creds = flow.run_local_server(port=0)
         with open('token.json', 'w') as token:
             token.write(creds.to_json())
-
     try:
         service = build('gmail', 'v1', credentials=creds)
         message = EmailMessage()
@@ -63,10 +62,8 @@ def sendMail(to_email: str, subject: str, body: str):
         message['To'] = to_email
         message['From'] = os.geten
         message['Subject'] = subject
-
         encoded_message = base64.urlsafe_b64encode(message.as_bytes()).decode()
         create_message = {'raw': encoded_message}
-
         send_message = service.users().messages().send(userId="me", body=create_message).execute()
         print(f"✅ Email sent successfully to {to_email} (ID: {send_message['id']})")
         return send_message['id']
@@ -104,7 +101,6 @@ def add_to_sheet(id, name, roll_no, email, phone_number, transaction_id): # adde
             .execute()
         )
         return result
-
     except HttpError as e:
         return {'error': str(e)}
 
@@ -245,7 +241,6 @@ def payment_confirmation(merchantOrderId):
             if data['state']=="COMPLETED":
                 completed=True
                 return jsonify({"success": "Payment completed"}), 200
-
         except Exception as e:
             return jsonify({'error': "payment failed"}), 500
 
