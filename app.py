@@ -27,7 +27,6 @@ CORS(app)
 
 max_seats = int(os.getenv("MAX_SEATS"))
 spreadsheet_id = os.getenv("SPREADSHEET_ID")
-spreadsheet_access_token = os.getenv("SPREADSHEET_ACCESS_TOKEN")
 base_url = os.getenv("BASE_URL")
 token_data = None
 
@@ -127,7 +126,7 @@ def get_access_token():
         return str(e)
     
 def confirm_payment(id, transaction_id):
-    student = PaymentDetails.query.get(id=id)
+    student = PaymentDetails.query.get(id)
     student.transaction_id = transaction_id
     db.session.commit()
     try:
