@@ -183,12 +183,12 @@ def create_order():
         return jsonify({"error": "Missing required fields"}),400
     prev = check_prev(name=data["name"], roll_no=data["roll_no"], email=data["email"])
     if prev and not prev.transaction_id:
-        id = prev.id
+        merchantOrderId = prev.id
     if prev:
         if prev.transaction_id:
             return jsonify({"error": "You have already paid"}),409
     else:
-        id = add_to_DB(
+        merchantOrderId = add_to_DB(
             name=data["name"], roll_no=data["roll_no"], phone_number=data["phone_number"], email = data['email']
         )
     try:
@@ -199,7 +199,7 @@ def create_order():
             "Authorization": f"O-Bearer {access_token}",
         }
         body = {
-            "merchantOrderId": str(id),
+            "merchantOrderId": str(merchantOrderId),
             "amount": 149900,
             "expireAfter": 1200,
             "paymentFlow": {
@@ -207,7 +207,6 @@ def create_order():
                 "message": "Payment message used for collect requests",
                 "merchantUrls": {
                     "redirectUrl": "http://localhost:3000/register/payment", # Change it to events.amfoss.in/register/payment in prod
-                    "callbackUrl": f"{base_url}/payment-status/",
                 },
             },
         }
@@ -251,7 +250,6 @@ def payment_confirmation(merchantOrderId):
     except Exception as e:
         print("Error in payment confirmation:", str(e))
         return jsonify({"error": str(e)})
-
 
 if __name__ == "__main__":
     app.run(debug=True)
