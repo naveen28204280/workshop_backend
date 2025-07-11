@@ -12,8 +12,6 @@ from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import InstalledAppFlow
 from email.message import EmailMessage
-from googleapiclient.discovery import build
-from googleapiclient.errors import HttpError
 import base64
 import os.path
 import time
@@ -143,7 +141,7 @@ def confirm_payment(id, transaction_id):
             subject="Workshop Seat Confirmed 🎉",
             body=f"Hi {student.name},\n\nYour seat has been confirmed! ✅\n\nTransaction ID: {transaction_id}\n\nThank you for joining our workshop!"
         )
-    except Exception as e:
+    except Exception:
         return False
     return True
 
@@ -238,12 +236,13 @@ def payment_confirmation(merchantOrderId):
             data = response.json()
             if data['state'] == "COMPLETED":
                 transaction_id = data["paymentDetails"][0]["transactionId"]
-                confirm_payment(
+                if confirm_payment(
                     id=int(merchantOrderId),
                     transaction_id=transaction_id
-                )
-                return jsonify({"success": True, "transactionId": transaction_id}), 200
-
+                ):
+                    return jsonify({"success": True, "transactionId": transaction_id}), 200
+                else:
+                    return jsonify({'error': "payment succesfull but failed to add to sheet", "transantionId": transaction_id}),202
             elif data['state'] == "FAILED":
                 transaction_id = data["paymentDetails"][0]["transactionId"]
                 return jsonify({"success": False, "state": "FAILED", "transactionId": transaction_id}), 200
