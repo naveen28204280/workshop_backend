@@ -219,10 +219,11 @@ def create_order():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
     
+
 @app.route("/payment-confirmation/<int:merchantOrderId>", methods=["GET"])
 def payment_confirmation(merchantOrderId):
     access_token = get_access_token()
-    url = f"https://api-preprod.phonepe.com/apis/pg-sandbox/checkout/v2/order/{merchantOrderId}/status"
+    url = f"https://api-preprod.phonepe.com/apis/pg-sandbox/checkout/v2/order/{merchantOrderId}/status" # change to https://api.phonepe.com/apis/pg/checkout/v2/order/{merchantOrderId}/status in prod
     headers = {
         "Content-Type": "application/json",
         "Authorization": f"O-Bearer {access_token}",
@@ -232,18 +233,26 @@ def payment_confirmation(merchantOrderId):
         "errorContext": "false"
     }
     try:
-        response = requests.get(url, headers=headers, params=params)
-        data = response.json()
-        if data['state'] == "COMPLETED":
-            confirm_payment(
-                id=int(merchantOrderId),
-                transaction_id=data["paymentDetails"][0]["transactionId"]
-            )
-            return jsonify({"success": True, "transactionId" : data["paymentDetails"][0]["transactionId"]}), 200
-        else:
-            return jsonify({"success": False,"transactionId" : data["paymentDetails"][0]["transactionId"], "state": data['state']}), 200
+        while True:
+            response = requests.get(url, headers=headers, params=params)
+            data = response.json()
+            if data['state'] == "COMPLETED":
+                transaction_id = data["paymentDetails"][0]["transactionId"]
+                confirm_payment(
+                    id=int(merchantOrderId),
+                    transaction_id=transaction_id
+                )
+                return jsonify({"success": True, "transactionId": transaction_id}), 200
+
+            elif data['state'] == "FAILED":
+                transaction_id = data["paymentDetails"][0]["transactionId"]
+                return jsonify({"success": False, "state": "FAILED", "transactionId": transaction_id}), 200
+            else:
+                time.sleep(1)
     except Exception as e:
-        return jsonify({"error": str(e)}),500
+        print("Error in payment confirmation:", str(e))
+        return jsonify({"error": str(e)})
+
 
 if __name__ == "__main__":
     app.run(debug=True)
