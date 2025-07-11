@@ -208,7 +208,7 @@ def create_order():
                 "type": "PG_CHECKOUT",
                 "message": "Payment message used for collect requests",
                 "merchantUrls": {
-                    "redirectUrl": f"{base_url}/payment-status/",
+                    "redirectUrl": "http://localhost:3000/register/payment", # Change it to events.amfoss.in/register/payment in prod
                     "callbackUrl": f"{base_url}/payment-status/",
                 },
             },
@@ -219,31 +219,31 @@ def create_order():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
     
-@app.route("/payment-confirmation/<int:merchantOrderId>", methods=["POST"])
+@app.route("/payment-confirmation/<int:merchantOrderId>", methods=["GET"])
 def payment_confirmation(merchantOrderId):
     access_token = get_access_token()
-    url = f"https://api-preprod.phonepe.com/apis/pg-sandbox/checkout/v2/order/{merchantOrderId}/status" # change to https://api.phonepe.com/apis/pg in prod
+    url = f"https://api-preprod.phonepe.com/apis/pg-sandbox/checkout/v2/order/{merchantOrderId}/status"
     headers = {
         "Content-Type": "application/json",
-        "Authorizaton": f"O-Bearer {access_token}",
+        "Authorization": f"O-Bearer {access_token}",
     }
     params = {
         "details": "false",
         "errorContext": "false"
     }
-    completed=False
-    while not completed:
-        try:
-            response = requests.get(url, headers=headers, params=params)
-            data = response.json()
-            if data['state']=="COMPLETED":
-                completed=True
-                if confirm_payment(id = data["payload"]["merchantOrderId"], transaction_id=data["payload"]["paymentDetails"]["transactionId"]):
-                    return jsonify({'success': 'Booked a seat'}), 200
-                else:
-                    return jsonify({'error': 'payment successful but failed to add to sheets'}), 202
-        except Exception as e:
-            return jsonify({'error': str(e)}), 500
+    try:
+        response = requests.get(url, headers=headers, params=params)
+        data = response.json()
+        if data['state'] == "COMPLETED":
+            confirm_payment(
+                id=int(merchantOrderId),
+                transaction_id=data["paymentDetails"][0]["transactionId"]
+            )
+            return jsonify({"success": True, "transactionId" : data["paymentDetails"][0]["transactionId"]}), 200
+        else:
+            return jsonify({"success": False,"transactionId" : data["paymentDetails"][0]["transactionId"], "state": data['state']}), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}),500
 
 if __name__ == "__main__":
     app.run(debug=True)
