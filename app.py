@@ -27,6 +27,7 @@ max_seats = int(os.getenv("MAX_SEATS"))
 spreadsheet_id = os.getenv("SPREADSHEET_ID")
 base_url = os.getenv("BASE_URL")
 token_data = None
+prod = False
 
 class PaymentDetails(db.Model):
     id = db.Column(db.Integer, primary_key=True, nullable=False, autoincrement=True)
@@ -106,7 +107,10 @@ def get_access_token():
     if token_data and time.time() < token_data['expires_at'] - 120:
         return token_data['access_token']
     try:
-        url = "https://api-preprod.phonepe.com/apis/pg-sandbox/v1/oauth/token" # change to https://api.phonepe.com/apis/identity-manager/v1/oauth/token for prod
+        if not prod:
+            url = "https://api-preprod.phonepe.com/apis/pg-sandbox/v1/oauth/token"
+        else:
+            url = "https://api.phonepe.com/apis/identity-manager/v1/oauth/token"
         headers = {
             'Content-Type': 'application/x-www-form-urlencoded'
         }
@@ -190,20 +194,25 @@ def create_order():
         )
     try:
         access_token = get_access_token()
-        url = "https://api-preprod.phonepe.com/apis/pg-sandbox/checkout/v2/pay"  # change to https://api.phonepe.com/apis/pg/checkout/v2/pay in prod
+        if not prod:
+            url = "https://api-preprod.phonepe.com/apis/pg-sandbox/checkout/v2/pay"
+        else:
+            url = "https://api.phonepe.com/apis/pg/checkout/v2/pay"
         headers = {
             "Content-Type": "application/json",
             "Authorization": f"O-Bearer {access_token}",
         }
         body = {
             "merchantOrderId": str(merchantOrderId),
-            "amount": 149900,
+            "amount": 149900 if prod else 1000,
             "expireAfter": 1200,
             "paymentFlow": {
                 "type": "PG_CHECKOUT",
                 "message": "Payment message used for collect requests",
                 "merchantUrls": {
-                    "redirectUrl": "http://localhost:3000/register/payment", # Change it to events.amfoss.in/register/payment in prod
+                    "redirectUrl": "http://localhost:3000/register/payment"
+                    if not prod
+                    else "https://events.amfoss.in/register/payment"
                 },
             },
         }
@@ -217,7 +226,10 @@ def create_order():
 @app.route("/payment-confirmation/<int:merchantOrderId>", methods=["GET"])
 def payment_confirmation(merchantOrderId):
     access_token = get_access_token()
-    url = f"https://api-preprod.phonepe.com/apis/pg-sandbox/checkout/v2/order/{merchantOrderId}/status" # change to https://api.phonepe.com/apis/pg/checkout/v2/order/{merchantOrderId}/status in prod
+    if not prod:
+        url = f"https://api-preprod.phonepe.com/apis/pg-sandbox/checkout/v2/order/{merchantOrderId}/status"
+    else:
+        url = f"https://api.phonepe.com/apis/pg/checkout/v2/order/{merchantOrderId}/status"
     headers = {
         "Content-Type": "application/json",
         "Authorization": f"O-Bearer {access_token}",
