@@ -188,7 +188,7 @@ def check_prev(name, roll_no, email):
 @app.route("/seats-left/", methods=["GET"])
 def no_of_seats_left():
     try:
-        booked = PaymentDetails.query.filter(PaymentDetails.transaction_id is not None).count()
+        booked = PaymentDetails.query.filter(PaymentDetails.transaction_id.isnot(None)).count()
         seats_left = max_seats - booked
         return jsonify({"seat_left": seats_left}), 200
     except Exception as e:
