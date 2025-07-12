@@ -9,14 +9,38 @@ from googleapiclient.errors import HttpError
 from google.oauth2.service_account import Credentials as ServiceAccountCredentials
 from googleapiclient.discovery import build
 from google.auth.transport.requests import Request
-from google.oauth2.credentials import Credentials
-from google_auth_oauthlib.flow import InstalledAppFlow
 from email.message import EmailMessage
 import base64
 import os.path
 import time
+import smtplib
 
 load_dotenv()
+emailCreds={
+  "installed": {
+    "client_id": os.getenv("MAILCLIENTID"),
+    "project_id": os.getenv("PROJECTID"),
+    "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+    "token_uri": "https://oauth2.googleapis.com/token",
+    "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
+    "client_secret":os.getenv("MAILSECRET"),
+    "redirect_uris": ["http://localhost"]
+  }
+}
+sheetsCreds={
+  "type": "service_account",
+  "project_id": os.getenv("PROJECTID"),
+  "private_key_id": os.getenv("SHEETPRIVATEKEYID"),
+  "private_key": os.getenv("SHEETPRIVATEKEY").replace("\\n","\n"),
+  "client_email": os.getenv("SHEETMAIL"),
+  "client_id": os.getenv("SHEETCLIENTID"),
+  "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+  "token_uri": "https://oauth2.googleapis.com/token",
+  "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
+  "client_x509_cert_url": os.getenv("SHEETCERT"),
+  "universe_domain": "googleapis.com"
+}
+
 
 app = Flask(__name__)
 app.config["SQLALCHEMY_DATABASE_URI"] = os.getenv("DATABASE_URI")
@@ -34,40 +58,37 @@ class PaymentDetails(db.Model):
     name = db.Column(db.String, nullable=False)
     email = db.Column(db.String, nullable=False)
     phone_number = db.Column(db.String, nullable=False)
-    transaction_id = db.Column(db.Integer, nullable=True)
+    transaction_id = db.Column(db.String, nullable=True)
     roll_no = db.Column(db.String, nullable=False)
 
 with app.app_context():
     db.create_all()
 
-def sendMail(to_email: str, subject: str, body: str):
-    SCOPES = ['https://www.googleapis.com/auth/gmail.send']
-    creds = None
-    if os.path.exists('token.json'):
-        creds = Credentials.from_authorized_user_file('token.json', SCOPES)
-    if not creds or not creds.valid:
-        if creds and creds.expired and creds.refresh_token:
-            creds.refresh(Request())
-        else:
-            flow = InstalledAppFlow.from_client_secrets_file('credentials.json', SCOPES)
-            creds = flow.run_local_server(port=0)
-        with open('token.json', 'w') as token:
-            token.write(creds.to_json())
+
+def sendMail(to_email,subject,body):
     try:
-        service = build('gmail', 'v1', credentials=creds)
-        message = EmailMessage()
-        message.set_content(body)
-        message['To'] = to_email
-        message['From'] = os.getenv("AMFOSS_MAIL")
-        message['Subject'] = subject
-        encoded_message = base64.urlsafe_b64encode(message.as_bytes()).decode()
-        create_message = {'raw': encoded_message}
-        send_message = service.users().messages().send(userId="me", body=create_message).execute()
-        print(f"✅ Email sent successfully to {to_email} (ID: {send_message['id']})")
-        return send_message['id']
+        
+        msg = EmailMessage()
+        msg["Subject"] = subject
+        msg["From"] = "support@amfoss.in" 
+        msg["To"] = to_email
+        msg.set_content(body)
+       
+        with smtplib.SMTP("smtp.gmail.com", 587) as smtp:
+            smtp.starttls()
+            smtp.login(os.getenv("EMAIL_ADDRESS"), os.getenv("EMAIL_PASSWORD"))
+            smtp.send_message(msg)
+        print(f"Mail sent to {to_email}")
     except Exception as e:
-        print(f"❌ Failed to send email: {e}")
-        return None
+        print(f"Failed to send email to {to_email}: {e}")
+        
+def add_to_DB(name, roll_no, email, phone_number):
+    student = PaymentDetails(
+        name=name, roll_no=roll_no, email=email, phone_number=phone_number
+    )
+    db.session.add(student)
+    db.session.commit()
+    return student.id
 
 def add_to_DB(name, roll_no, email, phone_number):
     student = PaymentDetails(
@@ -77,12 +98,13 @@ def add_to_DB(name, roll_no, email, phone_number):
     db.session.commit()
     return student.id
 
+
 def add_to_sheet(id, name, roll_no, email, phone_number, transaction_id): # added to sheet only if transaction is completed
     try:
         global spreadsheet_id
         range = "A2:F"
         scopes = ["https://www.googleapis.com/auth/spreadsheets"]
-        creds = ServiceAccountCredentials.from_service_account_file("creds.json", scopes=scopes)
+        creds = ServiceAccountCredentials.from_service_account_info(sheetsCreds, scopes=scopes)
         service = build("sheets", "v4", credentials=creds)
         values = [[id, name, roll_no, email, phone_number, transaction_id]]
         
@@ -99,9 +121,9 @@ def add_to_sheet(id, name, roll_no, email, phone_number, transaction_id): # adde
             .execute()
         )
         return result
-    except HttpError as e:
+    except Exception as e:
+        print(str(e))
         return {'error': str(e)}
-
 def get_access_token():
     global token_data
     if token_data and time.time() < token_data['expires_at'] - 120:
@@ -226,6 +248,7 @@ def create_order():
         response = requests.post(url, headers=headers, json=body)
         if response.status_code==200:
             data = response.json()
+            print(merchantOrderId)
             return jsonify({'redirectUrl': data['redirectUrl'], "merchantOrderId": merchantOrderId}), 200
         else:
             return jsonify({'error': 'failed to create order'}), 500
@@ -235,6 +258,7 @@ def create_order():
 
 @app.route("/payment-confirmation/<int:merchantOrderId>", methods=["GET"])
 def payment_confirmation(merchantOrderId):
+    print("Hi")
     access_token = get_access_token()
     if not prod:
         url = f"https://api-preprod.phonepe.com/apis/pg-sandbox/checkout/v2/order/{merchantOrderId}/status"
