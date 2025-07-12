@@ -15,4 +15,7 @@ __pycache__/
 
 backend/
 
-mailcreds.json
+creds.json
+credential.json
+token.json
+app2.py
