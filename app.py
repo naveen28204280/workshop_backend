@@ -121,9 +121,14 @@ def get_access_token():
             'grant_type': 'client_credentials'
         }
         response = requests.post(url=url, headers=headers, data=json)
-        data = response.json()
-        token_data = data
-        return data['access_token']
+        if response.status_code==200:
+            data = response.json()
+            token_data = data
+            return data['access_token']
+        elif time.time() < token_data["expires_at"]:
+            return token_data['access_token']
+        else:
+            return False
     except Exception as e:
         return str(e)
     
@@ -194,6 +199,8 @@ def create_order():
         )
     try:
         access_token = get_access_token()
+        if not access_token:
+            return jsonify({'error': 'access_token not generated'}), 500
         if not prod:
             url = "https://api-preprod.phonepe.com/apis/pg-sandbox/checkout/v2/pay"
         else:
@@ -217,8 +224,11 @@ def create_order():
             },
         }
         response = requests.post(url, headers=headers, json=body)
-        data = response.json()
-        return jsonify({'redirectUrl': data['redirectUrl'], "merchantOrderId": merchantOrderId}), 200
+        if response.status_code==200:
+            data = response.json()
+            return jsonify({'redirectUrl': data['redirectUrl'], "merchantOrderId": merchantOrderId}), 200
+        else:
+            return jsonify({'error': 'failed to create order'}), 500
     except Exception as e:
         return jsonify({"error": str(e)}), 500
     
@@ -241,6 +251,14 @@ def payment_confirmation(merchantOrderId):
     try:
         while True:
             response = requests.get(url, headers=headers, params=params)
+            if response.status_code!=200:
+                retry_count=0
+                max_retries=10
+                if retry_count < max_retries:
+                    retry_count += 1
+                    time.sleep(1)
+                    continue
+                return jsonify({"error": "max retries exceeded"}), 500
             data = response.json()
             if data['state'] == "COMPLETED":
                 transaction_id = data["paymentDetails"][0]["transactionId"]
