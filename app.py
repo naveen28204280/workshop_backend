@@ -103,7 +103,7 @@ def add_to_sheet(id, name, roll_no, email, phone_number, transaction_id): # adde
 
 def get_access_token():
     global token_data
-    if token_data and time.time() < token_data['expires_at']:
+    if token_data and time.time() < token_data['expires_at'] - 120:
         return token_data['access_token']
     try:
         url = "https://api-preprod.phonepe.com/apis/pg-sandbox/v1/oauth/token" # change to https://api.phonepe.com/apis/identity-manager/v1/oauth/token for prod
@@ -148,7 +148,6 @@ def confirm_payment(id, transaction_id):
 def check_prev(name, roll_no, email):
     transaction = PaymentDetails.query.filter(
         or_(
-            PaymentDetails.name == name,
             PaymentDetails.roll_no == roll_no,
             PaymentDetails.email == email,
         )
@@ -158,7 +157,6 @@ def check_prev(name, roll_no, email):
 @app.route("/seats-left/", methods=["GET"])
 def no_of_seats_left():
     try:
-        global max_seats
         booked = PaymentDetails.query.filter(PaymentDetails.transaction_id is not None).count()
         seats_left = max_seats - booked
         return jsonify({"seat_left": seats_left}), 200
@@ -167,7 +165,6 @@ def no_of_seats_left():
 
 @app.route("/create_order/", methods=["POST"])
 def create_order():
-    global max_seats
     booked = PaymentDetails.query.filter(PaymentDetails.transaction_id is not None).count()
     if (max_seats - booked) <= 0:
         return jsonify({'error': "No seats left"}),409
@@ -212,7 +209,7 @@ def create_order():
         }
         response = requests.post(url, headers=headers, json=body)
         data = response.json()
-        return jsonify({'redirectUrl': data['redirectUrl'], "orderId": merchantOrderId}), 200
+        return jsonify({'redirectUrl': data['redirectUrl'], "merchantOrderId": merchantOrderId}), 200
     except Exception as e:
         return jsonify({"error": str(e)}), 500
     
