@@ -212,7 +212,7 @@ def create_order():
         }
         response = requests.post(url, headers=headers, json=body)
         data = response.json()
-        return jsonify({'redirectUrl': data['redirectUrl'], "orderId": id}), 200
+        return jsonify({'redirectUrl': data['redirectUrl'], "orderId": merchantOrderId}), 200
     except Exception as e:
         return jsonify({"error": str(e)}), 500
     
